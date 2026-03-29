@@ -1,10 +1,14 @@
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
 
-dotenv.config({ path: path.resolve(process.cwd(), ".env.local"), override: true, quiet: true });
-dotenv.config({ path: path.resolve(process.cwd(), ".env"), override: false, quiet: true });
+const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+const projectRoot = path.resolve(moduleDir, "..");
+
+dotenv.config({ path: path.resolve(projectRoot, ".env.local"), override: true, quiet: true });
+dotenv.config({ path: path.resolve(projectRoot, ".env"), override: false, quiet: true });
 
 function parseBoolean(value, fallback = false) {
   if (value == null || value === "") {
@@ -81,10 +85,14 @@ function loadYandexAccount(prefix) {
 
 export function loadConfig() {
   const cwd = process.cwd();
-  const dbPath = path.resolve(cwd, process.env.DB_PATH || "./data/state.sqlite");
+  const dbPathValue = process.env.DB_PATH || "./data/state.sqlite";
+  const dbPath = path.isAbsolute(dbPathValue)
+    ? dbPathValue
+    : path.resolve(projectRoot, dbPathValue);
 
   return {
     cwd,
+    projectRoot,
     dbPath,
     pollIntervalMs: parseInteger(process.env.POLL_INTERVAL_MS, 60_000),
     bootstrapMode: process.env.BOOTSTRAP_MODE || "skip-existing",
