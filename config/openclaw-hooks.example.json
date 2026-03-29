@@ -1,0 +1,22 @@
+{
+  "hooks": {
+    "enabled": true,
+    "token": "{{OPENCLAW_HOOK_TOKEN}}",
+    "path": "/hooks",
+    "allowedAgentIds": ["main"],
+    "mappings": [
+      {
+        "match": { "path": "mail" },
+        "action": "agent",
+        "agentId": "main",
+        "wakeMode": "now",
+        "name": "Mail Bridge",
+        "sessionKey": "hook:mail:{{messages[0].provider}}:{{messages[0].account}}:{{messages[0].messageId}}",
+        "messageTemplate": "Новое письмо.\nПровайдер: {{messages[0].provider}}\nАккаунт: {{messages[0].account}}\nОт: {{messages[0].from}}\nТема: {{messages[0].subject}}\nСниппет: {{messages[0].snippet}}\nТело:\n{{messages[0].body}}\n\nЕсли письмо неважное, не отправляй мне уведомление. Если важное — пришли короткий алерт в Telegram: почему это важно, нужен ли ответ и насколько срочно.",
+        "deliver": true,
+        "channel": "last",
+        "model": "openai/gpt-5.4"
+      }
+    ]
+  }
+}

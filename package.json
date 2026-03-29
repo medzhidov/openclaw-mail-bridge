@@ -1,0 +1,23 @@
+{
+  "name": "openclaw-mail-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Read-only Gmail + Yandex mail bridge for OpenClaw hooks.",
+  "scripts": {
+    "start": "node src/index.js",
+    "once": "node src/index.js --once",
+    "doctor": "node src/index.js --doctor",
+    "backfill": "node src/index.js backfill",
+    "search": "node src/index.js search",
+    "message": "node src/index.js message",
+    "thread": "node src/index.js thread"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.8.0",
+    "dotenv": "^17.3.1",
+    "googleapis": "^171.4.0",
+    "imapflow": "^1.2.18",
+    "mailparser": "^3.9.6"
+  }
+}
