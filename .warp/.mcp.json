@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "openclaw-mail-bridge": {
+      "command": "node",
+      "args": ["src/mcp-server.js"]
+    }
+  }
+}

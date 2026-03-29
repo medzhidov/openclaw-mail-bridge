@@ -5,6 +5,7 @@
   "type": "module",
   "description": "Read-only Gmail + Yandex mail bridge for OpenClaw hooks.",
   "scripts": {
+    "mcp": "node src/mcp-server.js",
     "start": "node src/index.js",
     "once": "node src/index.js --once",
     "doctor": "node src/index.js --doctor",
@@ -16,10 +17,12 @@
     "thread": "node src/index.js thread"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.28.0",
     "better-sqlite3": "^12.8.0",
     "dotenv": "^17.3.1",
     "googleapis": "^171.4.0",
     "imapflow": "^1.2.18",
-    "mailparser": "^3.9.6"
+    "mailparser": "^3.9.6",
+    "zod": "^4.3.6"
   }
 }

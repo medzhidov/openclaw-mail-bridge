@@ -4,6 +4,7 @@
 - copies mail from Gmail and Yandex into a local SQLite database
 - keeps the archive searchable
 - sends only new incoming messages to OpenClaw hooks
+- can expose the archive as MCP tools for agents
 
 It is useful if you want your agent to work with real mail history without depending on a live mailbox search every time.
 
@@ -283,8 +284,29 @@ If an agent has shell access to this project, the safest way to use the bridge i
 Important limits:
 - this service is read-only
 - it does not send mail
-- it does not expose a formal MCP tool schema by itself
-- in the current OpenClaw setup, the agent learns about these capabilities through the hook prompt / message template
+- the shell commands still work, but MCP is a better interface for agents when available
+- hook delivery and MCP serve different purposes: hooks notify about new mail, MCP tools query the archive on demand
+
+## MCP server
+The project also includes a local MCP server so agents can use the mail archive as formal tools instead of only relying on shell commands or hook prompt instructions.
+
+Project-scoped Warp MCP config is included in:
+- `.warp/.mcp.json`
+
+The MCP server is started with:
+
+```bash
+npm run mcp
+```
+
+Available MCP tools:
+- `mail_today` — list messages received today
+- `mail_list` — list messages for a date range
+- `mail_search` — search the archive by keyword or topic
+- `mail_message` — open one message by id
+- `mail_thread` — open a whole thread
+
+This is better for agent reliability because the tool names, descriptions, and argument schemas are explicit.
 
 ## OpenClaw hook payload
 The service sends payloads like this:
