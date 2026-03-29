@@ -200,13 +200,12 @@ function renderListToolText(payload) {
     for (const account of payload.accounts || []) {
       lines.push(`${account.provider} / ${account.account}`);
       for (const message of account.messages || []) {
-        lines.push(`- ${message.receivedAt} | ${message.from} | ${message.subject}`);
+        lines.push(`- ${message.receivedAt} | ${message.provider}/${message.account} | ${message.mailbox || ""} | ${message.from} | ${message.subject}`);
       }
       lines.push("");
     }
 
-    return lines.join("
-").trim();
+    return lines.join("\n").trim();
   }
 
   const lines = [
@@ -216,10 +215,56 @@ function renderListToolText(payload) {
     "",
   ];
   for (const message of payload.messages || []) {
-    lines.push(`- ${message.receivedAt} | ${message.from} | ${message.subject}`);
+    lines.push(`- ${message.receivedAt} | ${message.provider}/${message.account} | ${message.mailbox || ""} | ${message.from} | ${message.subject}`);
   }
-  return lines.join("
-").trim();
+  return lines.join("\n").trim();
+}
+
+function renderSearchToolText(payload) {
+  const lines = [
+    `query: ${payload.query}`,
+    `count: ${payload.count}`,
+    "",
+  ];
+
+  for (const result of payload.results || []) {
+    lines.push(`- ${result.receivedAt} | ${result.provider}/${result.account} | ${result.mailbox || ""} | ${result.from} | ${result.subject}`);
+  }
+
+  return lines.join("\n").trim();
+}
+
+function renderMessageToolText(message) {
+  if (!message) {
+    return "not found";
+  }
+
+  return [
+    `id: ${message.id}`,
+    `provider: ${message.provider}`,
+    `account: ${message.account}`,
+    `mailbox: ${message.mailbox}`,
+    `receivedAt: ${message.receivedAt}`,
+    `from: ${message.from}`,
+    `to: ${message.to}`,
+    `subject: ${message.subject}`,
+    "",
+    message.bodyText || message.bodyHtml || message.snippet || "",
+  ].join("\n").trim();
+}
+
+function renderThreadToolText(payload) {
+  const lines = [
+    `threadKey: ${payload.threadKey || ""}`,
+    `count: ${payload.count}`,
+    "",
+  ];
+
+  for (const message of payload.messages || []) {
+    lines.push(`- ${message.receivedAt} | ${message.provider}/${message.account} | ${message.mailbox || ""} | ${message.from} | ${message.subject}`);
+  }
+
+  return lines.join("\n").trim();
 }
 
 function toToolResult(payload, text = null) {
@@ -364,11 +409,12 @@ server.registerTool(
       candidateMultiplier: config.archive.candidateMultiplier,
     });
 
-    return toToolResult({
+    const payload = {
       query,
       count: results.length,
       results,
-    });
+    };
+    return toToolResult(payload, renderSearchToolText(payload));
   },
 );
 
@@ -385,7 +431,8 @@ server.registerTool(
   },
   async ({ id, format, includeMetadata }) => {
     const message = store.getMailByCompositeId(id);
-    return toToolResult(renderMessageRecord(message, { format: format || "both", includeMetadata: Boolean(includeMetadata) }));
+    const payload = renderMessageRecord(message, { format: format || "both", includeMetadata: Boolean(includeMetadata) });
+    return toToolResult(payload, renderMessageToolText(payload));
   },
 );
 
@@ -411,11 +458,12 @@ server.registerTool(
       ? store.getThreadByKey(resolvedThreadKey, limit || config.archive.threadPreviewLimit)
       : [];
 
-    return toToolResult({
+    const payload = {
       threadKey: resolvedThreadKey || null,
       count: thread.length,
       messages: thread.map((message) => renderMessageRecord(message, { format: format || "both", includeMetadata: Boolean(includeMetadata) })),
-    });
+    };
+    return toToolResult(payload, renderThreadToolText(payload));
   },
 );
 

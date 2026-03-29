@@ -72,6 +72,7 @@ function rankSearchRows(rows, query, tokens, limit) {
       messageId: row.message_id,
       threadId: row.thread_id,
       threadKey: row.thread_key,
+      mailbox: row.mailbox,
       from: row.from,
       to: row.to,
       cc: row.cc,
@@ -467,7 +468,7 @@ export function createStateStore(dbPath) {
       const chunkParams = [matchExpression];
       let chunkSql = `
         SELECT
-          mails.external_id, mails.provider, mails.account, mails.message_id, mails.thread_id, mails.thread_key,
+          mails.external_id, mails.provider, mails.account, mails.message_id, mails.mailbox, mails.thread_id, mails.thread_key,
           mails.from_text AS "from", mails.to_text AS "to", mails.cc_text AS cc, mails.subject, mails.snippet,
           mails.body, mails.body_text, mails.body_html, mails.body_text_preview, mails.received_at,
           mail_chunks.chunk_index, mail_chunks.chunk_text, mail_chunks.chunk_preview,
@@ -480,7 +481,7 @@ export function createStateStore(dbPath) {
       const messageParams = [matchExpression];
       let messageSql = `
         SELECT
-          mails.external_id, mails.provider, mails.account, mails.message_id, mails.thread_id, mails.thread_key,
+          mails.external_id, mails.provider, mails.account, mails.message_id, mails.mailbox, mails.thread_id, mails.thread_key,
           mails.from_text AS "from", mails.to_text AS "to", mails.cc_text AS cc, mails.subject, mails.snippet,
           mails.body, mails.body_text, mails.body_html, mails.body_text_preview, mails.received_at,
           NULL AS chunk_index, NULL AS chunk_text, NULL AS chunk_preview,
