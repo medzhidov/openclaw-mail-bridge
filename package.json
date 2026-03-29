@@ -9,6 +9,8 @@
     "once": "node src/index.js --once",
     "doctor": "node src/index.js --doctor",
     "backfill": "node src/index.js backfill",
+    "list": "node src/index.js list",
+    "today": "node src/index.js today",
     "search": "node src/index.js search",
     "message": "node src/index.js message",
     "thread": "node src/index.js thread"

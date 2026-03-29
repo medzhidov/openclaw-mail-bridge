@@ -26,7 +26,7 @@ function parseArgs(argv) {
   };
   const positionals = [];
 
-  if (["backfill", "search", "message", "thread", "doctor"].includes(tokens[0])) {
+  if (["backfill", "list", "today", "search", "message", "thread", "doctor"].includes(tokens[0])) {
     args.command = tokens.shift();
     if (args.command === "doctor") {
       args.doctor = true;
@@ -108,6 +108,19 @@ function resolveBackfillRange(args, config) {
   const since = parseDateInput(args.since) || new Date(until.getTime() - (Math.max(1, args.days || config.archive.backfillDefaultDays) * 24 * 60 * 60 * 1000));
   return { since, until };
 }
+function resolveListRange(args) {
+  if (args.command === "today") {
+    const now = new Date();
+    const since = new Date(now);
+    since.setHours(0, 0, 0, 0);
+    return { since, until: now };
+  }
+
+  const until = parseDateInput(args.until) || null;
+  const since = parseDateInput(args.since)
+    || (args.days ? new Date((until || new Date()).getTime() - (Math.max(1, args.days) * 24 * 60 * 60 * 1000)) : null);
+  return { since, until };
+}
 
 function selectProviders(providers, args) {
   return providers.filter((provider) => {
@@ -187,6 +200,35 @@ function renderMessageRecord(message, args) {
 
   return result;
 }
+function renderListRecord(message) {
+  if (!message) {
+    return null;
+  }
+
+  return {
+    id: message.id,
+    provider: message.provider,
+    account: message.account,
+    messageId: message.messageId,
+    providerRef: message.providerRef,
+    mailbox: message.mailbox,
+    threadId: message.threadId,
+    threadKey: message.threadKey,
+    from: message.sender,
+    to: message.recipient,
+    cc: message.cc,
+    subject: message.subject,
+    snippet: message.snippet,
+    bodyTextPreview: message.bodyTextPreview,
+    receivedAt: message.receivedAt,
+    archivedAt: message.archivedAt,
+    updatedAt: message.updatedAt,
+    availableFormats: {
+      text: Boolean(message.bodyText),
+      html: Boolean(message.bodyHtml),
+    },
+  };
+}
 
 async function runCycle(providers, store, config, logger) {
   for (const provider of providers) {
@@ -237,6 +279,24 @@ function runSearch(store, config, args) {
 
   console.log(JSON.stringify({ query: args.query, count: results.length, results }, null, 2));
 }
+function runListLookup(store, config, args) {
+  const range = resolveListRange(args);
+  const results = store.listArchive({
+    provider: args.provider || undefined,
+    account: args.account || undefined,
+    since: range.since?.toISOString(),
+    until: range.until?.toISOString(),
+    limit: args.limit || Math.max(20, config.archive.threadPreviewLimit),
+  });
+
+  console.log(JSON.stringify({
+    mode: args.command,
+    since: range.since?.toISOString() || null,
+    until: range.until?.toISOString() || null,
+    count: results.length,
+    messages: results.map(renderListRecord),
+  }, null, 2));
+}
 
 function runMessageLookup(store, args) {
   if (!args.id) {
@@ -274,7 +334,7 @@ function getMissingConfigForCommand(missing, args) {
   if (args.command === "backfill") {
     return missing.filter((item) => item !== "OPENCLAW_HOOK_TOKEN");
   }
-  if (["search", "message", "thread"].includes(args.command)) {
+  if (["list", "today", "search", "message", "thread"].includes(args.command)) {
     return [];
   }
   return missing;
@@ -331,6 +391,11 @@ async function main() {
 
   if (args.command === "backfill") {
     await runBackfill(providers, store, config, args);
+    store.close();
+    return;
+  }
+  if (args.command === "list" || args.command === "today") {
+    runListLookup(store, config, args);
     store.close();
     return;
   }

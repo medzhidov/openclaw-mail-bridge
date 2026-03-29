@@ -376,6 +376,41 @@ export function createStateStore(dbPath) {
     getThreadByKey(threadKey, limit = 20) {
       return getThreadStmt.all(threadKey, limit);
     },
+    listArchive(options = {}) {
+      const limit = Math.max(1, Number(options.limit) || 20);
+      const params = [];
+      let sql = `
+        SELECT
+          external_id AS id, provider, account, message_id AS messageId, provider_ref AS providerRef, mailbox,
+          thread_id AS threadId, thread_key AS threadKey, from_text AS sender, to_text AS recipient,
+          cc_text AS cc, subject, snippet, body_text AS bodyText, body_html AS bodyHtml,
+          body_text_preview AS bodyTextPreview, received_at AS receivedAt, archived_at AS archivedAt,
+          updated_at AS updatedAt
+        FROM mails
+        WHERE 1 = 1
+      `;
+
+      if (options.provider) {
+        sql += ` AND provider = ?`;
+        params.push(options.provider);
+      }
+      if (options.account) {
+        sql += ` AND account = ?`;
+        params.push(options.account);
+      }
+      if (options.since) {
+        sql += ` AND datetime(received_at) >= datetime(?)`;
+        params.push(new Date(options.since).toISOString());
+      }
+      if (options.until) {
+        sql += ` AND datetime(received_at) <= datetime(?)`;
+        params.push(new Date(options.until).toISOString());
+      }
+
+      sql += ` ORDER BY datetime(received_at) DESC, id DESC LIMIT ?`;
+      params.push(limit);
+      return db.prepare(sql).all(...params);
+    },
     searchArchive(options = {}) {
       const query = options.query || "";
       const limit = Math.max(1, Number(options.limit) || 8);

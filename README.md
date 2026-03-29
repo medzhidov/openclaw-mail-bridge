@@ -16,7 +16,7 @@ It is useful if you want your agent to work with real mail history without depen
 - No duplicate messages for the same `provider + account + messageId`
 - Safe first start: existing mail is not re-sent to OpenClaw
 - Backfill old mail into the archive without replaying notifications
-- Simple CLI for `search`, `message`, and `thread`
+- Simple CLI for `today`, `list`, `search`, `message`, and `thread`
 - Optional metadata output when you need full headers
 - Can run as a normal process or as a macOS LaunchAgent
 
@@ -83,6 +83,10 @@ npm run backfill -- --days 365
 ```
 
 7. Test search and retrieval:
+
+```bash
+npm run today -- --limit 20
+```
 
 ```bash
 npm run search -- --query "invoice from alice last month"
@@ -188,6 +192,19 @@ Or backfill a specific date range:
 npm run backfill -- --since 2025-01-01 --until 2026-01-01
 ```
 
+### Listing mail by date
+Show mail received today:
+
+```bash
+npm run today -- --limit 50
+```
+
+Show mail for a specific period:
+
+```bash
+npm run list -- --since 2026-03-29T00:00:00 --until 2026-03-29T23:59:59 --limit 100
+```
+
 ### Search and retrieval
 Search the local archive:
 
@@ -254,6 +271,20 @@ In simple terms:
 - when needed, you can then fetch the full message in `text`, `html`, or `both` format
 
 This approach is fast, local, and easy to inspect.
+
+## Agent usage
+If an agent has shell access to this project, the safest way to use the bridge is:
+
+- use `npm run today` or `npm run list` when you need a date-based overview of messages
+- use `npm run search` when you need keyword or topic-based search
+- use `npm run message` to open one message in full
+- use `npm run thread` to inspect the surrounding conversation
+
+Important limits:
+- this service is read-only
+- it does not send mail
+- it does not expose a formal MCP tool schema by itself
+- in the current OpenClaw setup, the agent learns about these capabilities through the hook prompt / message template
 
 ## OpenClaw hook payload
 The service sends payloads like this:
