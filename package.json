@@ -1,14 +1,50 @@
 {
   "name": "openclaw-mail-bridge",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "description": "Read-only Gmail + Yandex mail bridge for OpenClaw hooks.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/medzhidov/openclaw-mail-bridge.git"
+  },
+  "homepage": "https://github.com/medzhidov/openclaw-mail-bridge#readme",
+  "bugs": {
+    "url": "https://github.com/medzhidov/openclaw-mail-bridge/issues"
+  },
+  "bin": {
+    "openclaw-mail-bridge": "./bin/openclaw-mail-bridge.js",
+    "openclaw-mail-bridge-mcp": "./bin/openclaw-mail-bridge-mcp.js"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "config/",
+    "scripts/",
+    "launchd/",
+    ".env.example",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "mcp",
+    "openclaw",
+    "gmail",
+    "yandex",
+    "mail"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "mcp": "node src/mcp-server.js",
     "start": "node src/index.js",
     "once": "node src/index.js --once",
     "doctor": "node src/index.js --doctor",
+    "init-config": "node src/index.js init-config",
     "backfill": "node src/index.js backfill",
     "list": "node src/index.js list",
     "today": "node src/index.js today",

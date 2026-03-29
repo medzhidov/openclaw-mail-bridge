@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import process from "node:process";
 import { loadConfig, validateConfig } from "./config.js";
 import { createStateStore } from "./db.js";
@@ -27,7 +29,7 @@ function parseArgs(argv) {
   };
   const positionals = [];
 
-  if (["backfill", "list", "today", "search", "message", "thread", "doctor"].includes(tokens[0])) {
+  if (["backfill", "list", "today", "search", "message", "thread", "doctor", "init-config"].includes(tokens[0])) {
     args.command = tokens.shift();
     if (args.command === "doctor") {
       args.doctor = true;
@@ -328,6 +330,25 @@ async function runBackfill(providers, store, config, args) {
   console.log(JSON.stringify(summary, null, 2));
 }
 
+function runInitConfig(config) {
+  fs.mkdirSync(config.configRoot, { recursive: true });
+
+  const sourcePath = path.resolve(config.projectRoot, ".env.example");
+  const targetPath = path.resolve(config.configRoot, ".env");
+  const existed = fs.existsSync(targetPath);
+
+  if (!existed) {
+    fs.copyFileSync(sourcePath, targetPath);
+  }
+
+  console.log(JSON.stringify({
+    configRoot: config.configRoot,
+    envFile: targetPath,
+    created: !existed,
+    note: "Fill in credentials in the env file, then run doctor.",
+  }, null, 2));
+}
+
 function runSearch(store, config, args) {
   if (!args.query) {
     throw new Error('Search query is required. Use: node src/index.js search --query "..."');
@@ -408,7 +429,7 @@ function getMissingConfigForCommand(missing, args) {
   if (args.command === "backfill") {
     return missing.filter((item) => item !== "OPENCLAW_HOOK_TOKEN");
   }
-  if (["list", "today", "search", "message", "thread"].includes(args.command)) {
+  if (["list", "today", "search", "message", "thread", "init-config"].includes(args.command)) {
     return [];
   }
   return missing;
@@ -463,6 +484,10 @@ async function main() {
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
+  if (args.command === "init-config") {
+    runInitConfig(config);
+    return;
+  }
   if (args.command === "backfill") {
     await runBackfill(providers, store, config, args);
     store.close();

@@ -99,6 +99,60 @@ npm run search -- --query "invoice from alice last month"
 npm start
 ```
 
+## npm package / no-clone MCP setup
+You can publish this project to npm and run it through MCP clients with `npx` / `npm exec` without cloning the repository.
+
+What still must exist on the user's machine:
+- Node.js 20+
+- local credentials in an env file
+- local writable storage for the SQLite archive
+
+Recommended config location for published-package usage:
+- `~/.config/openclaw-mail-bridge/.env`
+
+After publishing, the intended flow is:
+
+```bash
+npx -y openclaw-mail-bridge init-config
+```
+
+Then fill in `~/.config/openclaw-mail-bridge/.env`, validate it:
+
+```bash
+npx -y openclaw-mail-bridge doctor
+```
+
+And register the MCP server with a config like:
+
+```json
+{
+  "command": "npx",
+  "args": ["-y", "openclaw-mail-bridge-mcp"]
+}
+```
+
+For clients that support custom environment variables, you can also pin a custom config directory:
+
+```json
+{
+  "command": "npx",
+  "args": ["-y", "openclaw-mail-bridge-mcp"],
+  "env": {
+    "OPENCLAW_MAIL_BRIDGE_CONFIG_DIR": "/absolute/path/to/openclaw-mail-bridge-config"
+  }
+}
+```
+
+Config lookup priority is:
+1. `OPENCLAW_MAIL_BRIDGE_ENV_FILE`
+2. `OPENCLAW_MAIL_BRIDGE_CONFIG_DIR`
+3. current working directory `.env` / `.env.local`
+4. `~/.config/openclaw-mail-bridge`
+5. `~/.openclaw-mail-bridge`
+6. package/repository root
+
+For relative paths like `DB_PATH=./data/state.sqlite`, the base directory is the resolved config directory, not the npm cache.
+
 ## Installation notes
 This project is intentionally read-only:
 
@@ -113,9 +167,11 @@ Copy `.env.example` to `.env` and change only the values you need.
 
 ### Core settings
 - `POLL_INTERVAL_MS` — how often the service checks for new mail
-- `DB_PATH` — where the SQLite database is stored
+- `DB_PATH` — where the SQLite database is stored; relative paths are resolved from the active config directory
 - `LOG_LEVEL` — log verbosity
 - `BOOTSTRAP_MODE=skip-existing` — on first start, remember current mail without delivering old messages
+- `OPENCLAW_MAIL_BRIDGE_CONFIG_DIR` — optional explicit config directory for published-package / MCP usage
+- `OPENCLAW_MAIL_BRIDGE_ENV_FILE` — optional explicit path to a single env file
 
 ### OpenClaw delivery
 - `OPENCLAW_HOOK_URL` — hook URL such as `http://127.0.0.1:18789/hooks/mail`
@@ -309,6 +365,12 @@ The MCP server is started with:
 
 ```bash
 npm run mcp
+```
+
+If published to npm, the MCP server entrypoint is:
+
+```bash
+npx -y openclaw-mail-bridge-mcp
 ```
 
 Available MCP tools:

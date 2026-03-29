@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -6,9 +7,76 @@ import dotenv from "dotenv";
 
 const moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(moduleDir, "..");
+const defaultHomeConfigDir = path.resolve(os.homedir(), ".config", "openclaw-mail-bridge");
+const legacyHomeConfigDir = path.resolve(os.homedir(), ".openclaw-mail-bridge");
 
-dotenv.config({ path: path.resolve(projectRoot, ".env.local"), override: true, quiet: true });
-dotenv.config({ path: path.resolve(projectRoot, ".env"), override: false, quiet: true });
+function resolveOptionalAbsolutePath(value, fallbackBase = process.cwd()) {
+  if (!value) {
+    return "";
+  }
+
+  return path.isAbsolute(value) ? value : path.resolve(fallbackBase, value);
+}
+
+function hasEnvFiles(dir) {
+  if (!dir) {
+    return false;
+  }
+
+  return [".env.local", ".env"].some((filename) => fs.existsSync(path.resolve(dir, filename)));
+}
+
+function resolveConfigRoot() {
+  const explicitEnvFile = resolveOptionalAbsolutePath(process.env.OPENCLAW_MAIL_BRIDGE_ENV_FILE);
+  if (explicitEnvFile) {
+    return path.dirname(explicitEnvFile);
+  }
+
+  const explicitConfigDir = resolveOptionalAbsolutePath(process.env.OPENCLAW_MAIL_BRIDGE_CONFIG_DIR);
+  if (explicitConfigDir) {
+    return explicitConfigDir;
+  }
+
+  const cwd = process.cwd();
+  if (hasEnvFiles(cwd)) {
+    return cwd;
+  }
+  if (hasEnvFiles(defaultHomeConfigDir)) {
+    return defaultHomeConfigDir;
+  }
+  if (hasEnvFiles(legacyHomeConfigDir)) {
+    return legacyHomeConfigDir;
+  }
+  if (hasEnvFiles(projectRoot)) {
+    return projectRoot;
+  }
+
+  return defaultHomeConfigDir;
+}
+
+function loadEnvFiles() {
+  const explicitEnvFile = resolveOptionalAbsolutePath(process.env.OPENCLAW_MAIL_BRIDGE_ENV_FILE);
+  const explicitConfigDir = resolveOptionalAbsolutePath(process.env.OPENCLAW_MAIL_BRIDGE_CONFIG_DIR);
+  const cwd = process.cwd();
+  const configDirs = [
+    explicitConfigDir,
+    cwd,
+    defaultHomeConfigDir,
+    legacyHomeConfigDir,
+    projectRoot,
+  ].filter(Boolean);
+
+  if (explicitEnvFile) {
+    dotenv.config({ path: explicitEnvFile, override: false, quiet: true });
+  }
+
+  for (const dir of configDirs) {
+    dotenv.config({ path: path.resolve(dir, ".env.local"), override: false, quiet: true });
+    dotenv.config({ path: path.resolve(dir, ".env"), override: false, quiet: true });
+  }
+}
+
+loadEnvFiles();
 
 function parseBoolean(value, fallback = false) {
   if (value == null || value === "") {
@@ -85,14 +153,17 @@ function loadYandexAccount(prefix) {
 
 export function loadConfig() {
   const cwd = process.cwd();
+  const configRoot = resolveConfigRoot();
   const dbPathValue = process.env.DB_PATH || "./data/state.sqlite";
   const dbPath = path.isAbsolute(dbPathValue)
     ? dbPathValue
-    : path.resolve(projectRoot, dbPathValue);
+    : path.resolve(configRoot, dbPathValue);
 
   return {
     cwd,
     projectRoot,
+    configRoot,
+    defaultHomeConfigDir,
     dbPath,
     pollIntervalMs: parseInteger(process.env.POLL_INTERVAL_MS, 60_000),
     bootstrapMode: process.env.BOOTSTRAP_MODE || "skip-existing",
