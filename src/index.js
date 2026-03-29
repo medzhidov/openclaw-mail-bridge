@@ -21,6 +21,7 @@ function parseArgs(argv) {
     until: "",
     days: null,
     limit: null,
+    perAccountLimit: null,
     format: "both",
     includeMetadata: false,
   };
@@ -70,6 +71,9 @@ function parseArgs(argv) {
         break;
       case "--limit":
         args.limit = Number.parseInt(tokens.shift() || "", 10);
+        break;
+      case "--per-account-limit":
+        args.perAccountLimit = Number.parseInt(tokens.shift() || "", 10);
         break;
       case "--format":
         args.format = tokens.shift() || "both";
@@ -230,6 +234,68 @@ function renderListRecord(message) {
   };
 }
 
+function buildAccountGroups(messages) {
+  const groups = new Map();
+
+  for (const message of messages) {
+    const key = `${message.provider}\u0000${message.account}`;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        provider: message.provider,
+        account: message.account,
+        count: 0,
+        latestReceivedAt: message.receivedAt || "",
+        messages: [],
+      });
+    }
+
+    const group = groups.get(key);
+    group.count += 1;
+    if ((message.receivedAt || "") > group.latestReceivedAt) {
+      group.latestReceivedAt = message.receivedAt || "";
+    }
+    group.messages.push(renderListRecord(message));
+  }
+
+  return [...groups.values()]
+    .sort((a, b) => b.latestReceivedAt.localeCompare(a.latestReceivedAt) || a.provider.localeCompare(b.provider) || a.account.localeCompare(b.account))
+    .map(({ latestReceivedAt, ...group }) => group);
+}
+
+function resolvePerAccountLimit({ account, limit, perAccountLimit, defaultLimit }) {
+  const normalizedPerAccountLimit = Number(perAccountLimit) || null;
+  if (normalizedPerAccountLimit) {
+    return normalizedPerAccountLimit;
+  }
+
+  if (!account) {
+    return Math.max(1, Number(limit) || defaultLimit);
+  }
+
+  return null;
+}
+
+function renderListPayload(args, range, messages) {
+  const renderedMessages = messages.map(renderListRecord);
+  const payload = {
+    mode: args.command,
+    since: range.since?.toISOString() || null,
+    until: range.until?.toISOString() || null,
+    grouping: args.perAccountLimit ? "per_account" : "global",
+    count: renderedMessages.length,
+  };
+
+  if (args.perAccountLimit) {
+    payload.perAccountLimit = args.perAccountLimit;
+    payload.accounts = buildAccountGroups(messages);
+    payload.accountCount = payload.accounts.length;
+  } else {
+    payload.messages = renderedMessages;
+  }
+
+  return payload;
+}
+
 async function runCycle(providers, store, config, logger) {
   for (const provider of providers) {
     const mails = await provider.poll();
@@ -281,21 +347,29 @@ function runSearch(store, config, args) {
 }
 function runListLookup(store, config, args) {
   const range = resolveListRange(args);
-  const results = store.listArchive({
-    provider: args.provider || undefined,
-    account: args.account || undefined,
-    since: range.since?.toISOString(),
-    until: range.until?.toISOString(),
-    limit: args.limit || Math.max(20, config.archive.threadPreviewLimit),
+  const effectivePerAccountLimit = resolvePerAccountLimit({
+    account: args.account,
+    limit: args.limit,
+    perAccountLimit: args.perAccountLimit,
+    defaultLimit: Math.max(20, config.archive.threadPreviewLimit),
   });
+  const results = effectivePerAccountLimit
+    ? store.listArchiveByAccount({
+      provider: args.provider || undefined,
+      account: args.account || undefined,
+      since: range.since?.toISOString(),
+      until: range.until?.toISOString(),
+      perAccountLimit: effectivePerAccountLimit,
+    })
+    : store.listArchive({
+      provider: args.provider || undefined,
+      account: args.account || undefined,
+      since: range.since?.toISOString(),
+      until: range.until?.toISOString(),
+      limit: args.limit || Math.max(20, config.archive.threadPreviewLimit),
+    });
 
-  console.log(JSON.stringify({
-    mode: args.command,
-    since: range.since?.toISOString() || null,
-    until: range.until?.toISOString() || null,
-    count: results.length,
-    messages: results.map(renderListRecord),
-  }, null, 2));
+  console.log(JSON.stringify(renderListPayload({ ...args, perAccountLimit: effectivePerAccountLimit }, range, results), null, 2));
 }
 
 function runMessageLookup(store, args) {

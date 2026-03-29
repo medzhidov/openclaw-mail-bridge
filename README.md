@@ -194,16 +194,28 @@ npm run backfill -- --since 2025-01-01 --until 2026-01-01
 ```
 
 ### Listing mail by date
-Show mail received today:
+Show mail received today. Without `--account`, `--limit` is applied per mailbox:
 
 ```bash
 npm run today -- --limit 50
 ```
 
-Show mail for a specific period:
+Show the latest 5 messages per mailbox for today:
+
+```bash
+npm run today -- --per-account-limit 5
+```
+
+Show mail for a specific period. Without `--account`, `--limit` is applied per mailbox:
 
 ```bash
 npm run list -- --since 2026-03-29T00:00:00 --until 2026-03-29T23:59:59 --limit 100
+```
+
+Show the latest 3 messages per mailbox for a range:
+
+```bash
+npm run list -- --since 2026-03-29T00:00:00 --until 2026-03-29T23:59:59 --per-account-limit 3
 ```
 
 ### Search and retrieval

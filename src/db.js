@@ -113,6 +113,29 @@ function parseCompositeId(id) {
   return { provider, account, messageId: rest.join(":") };
 }
 
+function appendArchiveFilters(sql, params, options = {}, tableAlias = "") {
+  const prefix = tableAlias ? `${tableAlias}.` : "";
+
+  if (options.provider) {
+    sql += ` AND ${prefix}provider = ?`;
+    params.push(options.provider);
+  }
+  if (options.account) {
+    sql += ` AND ${prefix}account = ?`;
+    params.push(options.account);
+  }
+  if (options.since) {
+    sql += ` AND datetime(${prefix}received_at) >= datetime(?)`;
+    params.push(new Date(options.since).toISOString());
+  }
+  if (options.until) {
+    sql += ` AND datetime(${prefix}received_at) <= datetime(?)`;
+    params.push(new Date(options.until).toISOString());
+  }
+
+  return sql;
+}
+
 export function createStateStore(dbPath) {
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
@@ -389,26 +412,44 @@ export function createStateStore(dbPath) {
         FROM mails
         WHERE 1 = 1
       `;
-
-      if (options.provider) {
-        sql += ` AND provider = ?`;
-        params.push(options.provider);
-      }
-      if (options.account) {
-        sql += ` AND account = ?`;
-        params.push(options.account);
-      }
-      if (options.since) {
-        sql += ` AND datetime(received_at) >= datetime(?)`;
-        params.push(new Date(options.since).toISOString());
-      }
-      if (options.until) {
-        sql += ` AND datetime(received_at) <= datetime(?)`;
-        params.push(new Date(options.until).toISOString());
-      }
+      sql = appendArchiveFilters(sql, params, options);
 
       sql += ` ORDER BY datetime(received_at) DESC, id DESC LIMIT ?`;
       params.push(limit);
+      return db.prepare(sql).all(...params);
+    },
+    listArchiveByAccount(options = {}) {
+      const perAccountLimit = Math.max(1, Number(options.perAccountLimit) || 1);
+      const params = [];
+      let sql = `
+        WITH ranked_mail AS (
+          SELECT
+            external_id AS id, provider, account, message_id AS messageId, provider_ref AS providerRef, mailbox,
+            thread_id AS threadId, thread_key AS threadKey, from_text AS sender, to_text AS recipient,
+            cc_text AS cc, subject, snippet, body_text AS bodyText, body_html AS bodyHtml,
+            body_text_preview AS bodyTextPreview, received_at AS receivedAt, archived_at AS archivedAt,
+            updated_at AS updatedAt,
+            ROW_NUMBER() OVER (
+              PARTITION BY provider, account
+              ORDER BY datetime(received_at) DESC, id DESC
+            ) AS accountRank
+          FROM mails
+          WHERE 1 = 1
+      `;
+
+      sql = appendArchiveFilters(sql, params, options);
+      sql += `
+        )
+        SELECT
+          id, provider, account, messageId, providerRef, mailbox, threadId, threadKey,
+          sender, recipient, cc, subject, snippet, bodyText, bodyHtml, bodyTextPreview,
+          receivedAt, archivedAt, updatedAt, accountRank
+        FROM ranked_mail
+        WHERE accountRank <= ?
+        ORDER BY provider ASC, account ASC, accountRank ASC, datetime(receivedAt) DESC, id DESC
+      `;
+      params.push(perAccountLimit);
+
       return db.prepare(sql).all(...params);
     },
     searchArchive(options = {}) {

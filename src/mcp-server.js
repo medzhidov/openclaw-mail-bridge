@@ -120,9 +120,111 @@ function renderListRecord(message) {
   };
 }
 
-function toToolResult(payload) {
+function buildAccountGroups(messages) {
+  const groups = new Map();
+
+  for (const message of messages) {
+    const key = `${message.provider}\u0000${message.account}`;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        provider: message.provider,
+        account: message.account,
+        count: 0,
+        latestReceivedAt: message.receivedAt || "",
+        messages: [],
+      });
+    }
+
+    const group = groups.get(key);
+    group.count += 1;
+    if ((message.receivedAt || "") > group.latestReceivedAt) {
+      group.latestReceivedAt = message.receivedAt || "";
+    }
+    group.messages.push(renderListRecord(message));
+  }
+
+  return [...groups.values()]
+    .sort((a, b) => b.latestReceivedAt.localeCompare(a.latestReceivedAt) || a.provider.localeCompare(b.provider) || a.account.localeCompare(b.account))
+    .map(({ latestReceivedAt, ...group }) => group);
+}
+
+function resolvePerAccountLimit({ account, limit, perAccountLimit, defaultLimit }) {
+  const normalizedPerAccountLimit = Number(perAccountLimit) || null;
+  if (normalizedPerAccountLimit) {
+    return normalizedPerAccountLimit;
+  }
+
+  if (!account) {
+    return Math.max(1, Number(limit) || defaultLimit);
+  }
+
+  return null;
+}
+
+function renderListPayload({ mode, since, until, messages, perAccountLimit }) {
+  const renderedMessages = messages.map(renderListRecord);
+  const payload = {
+    mode,
+    since: since || null,
+    until: until || null,
+    grouping: perAccountLimit ? "per_account" : "global",
+    count: renderedMessages.length,
+  };
+
+  if (perAccountLimit) {
+    payload.perAccountLimit = perAccountLimit;
+    payload.accounts = buildAccountGroups(messages);
+    payload.accountCount = payload.accounts.length;
+  } else {
+    payload.messages = renderedMessages;
+  }
+
+  return payload;
+}
+
+function renderListToolText(payload) {
+  if (!payload) {
+    return "";
+  }
+
+  if (payload.grouping === "per_account") {
+    const lines = [
+      `mode: ${payload.mode}`,
+      `grouping: per_account`,
+      `perAccountLimit: ${payload.perAccountLimit}`,
+      `accountCount: ${payload.accountCount}`,
+      `messageCount: ${payload.count}`,
+      "",
+    ];
+
+    for (const account of payload.accounts || []) {
+      lines.push(`${account.provider} / ${account.account}`);
+      for (const message of account.messages || []) {
+        lines.push(`- ${message.receivedAt} | ${message.from} | ${message.subject}`);
+      }
+      lines.push("");
+    }
+
+    return lines.join("
+").trim();
+  }
+
+  const lines = [
+    `mode: ${payload.mode}`,
+    `grouping: global`,
+    `messageCount: ${payload.count}`,
+    "",
+  ];
+  for (const message of payload.messages || []) {
+    lines.push(`- ${message.receivedAt} | ${message.from} | ${message.subject}`);
+  }
+  return lines.join("
+").trim();
+}
+
+function toToolResult(payload, text = null) {
   return {
-    content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
+    content: [{ type: "text", text: text || JSON.stringify(payload, null, 2) }],
     structuredContent: payload,
   };
 }
@@ -158,26 +260,37 @@ server.registerTool(
     inputSchema: z.object({
       provider: z.string().optional().describe("Optional provider filter, for example gmail or yandex."),
       account: z.string().optional().describe("Optional account filter."),
-      limit: z.number().int().min(1).max(200).optional().describe("Maximum number of messages to return. Default is 20."),
+      limit: z.number().int().min(1).max(200).optional().describe("Maximum number of messages to return. If account is omitted, this limit is applied per mailbox. Default is 20."),
+      perAccountLimit: z.number().int().min(1).max(50).optional().describe("Optional explicit per-account cap. Usually you can omit this because mail_today defaults to per-mailbox mode when account is not specified."),
     }),
   },
-  async ({ provider, account, limit }) => {
+  async ({ provider, account, limit, perAccountLimit }) => {
     const range = resolveListRange({ today: true });
-    const messages = store.listArchive({
-      provider,
-      account,
-      since: range.since?.toISOString(),
-      until: range.until?.toISOString(),
-      limit: limit || 20,
-    }).map(renderListRecord);
+    const effectivePerAccountLimit = resolvePerAccountLimit({ account, limit, perAccountLimit, defaultLimit: 20 });
+    const messages = effectivePerAccountLimit
+      ? store.listArchiveByAccount({
+        provider,
+        account,
+        since: range.since?.toISOString(),
+        until: range.until?.toISOString(),
+        perAccountLimit: effectivePerAccountLimit,
+      })
+      : store.listArchive({
+        provider,
+        account,
+        since: range.since?.toISOString(),
+        until: range.until?.toISOString(),
+        limit: limit || 20,
+      });
 
-    return toToolResult({
+    const payload = renderListPayload({
       mode: "today",
       since: range.since?.toISOString() || null,
       until: range.until?.toISOString() || null,
-      count: messages.length,
       messages,
+      perAccountLimit: effectivePerAccountLimit,
     });
+    return toToolResult(payload, renderListToolText(payload));
   },
 );
 
@@ -192,26 +305,37 @@ server.registerTool(
       since: z.string().optional().describe("Optional ISO datetime lower bound."),
       until: z.string().optional().describe("Optional ISO datetime upper bound."),
       days: z.number().int().min(1).max(3650).optional().describe("Optional relative range in days if since is not provided."),
-      limit: z.number().int().min(1).max(200).optional().describe("Maximum number of messages to return. Default is 20."),
+      limit: z.number().int().min(1).max(200).optional().describe("Maximum number of messages to return. If account is omitted, this limit is applied per mailbox. Default is 20."),
+      perAccountLimit: z.number().int().min(1).max(50).optional().describe("Optional explicit per-account cap. Usually you can omit this because mail_list defaults to per-mailbox mode when account is not specified."),
     }),
   },
-  async ({ provider, account, since, until, days, limit }) => {
+  async ({ provider, account, since, until, days, limit, perAccountLimit }) => {
     const range = resolveListRange({ since, until, days });
-    const messages = store.listArchive({
-      provider,
-      account,
-      since: range.since?.toISOString(),
-      until: range.until?.toISOString(),
-      limit: limit || 20,
-    }).map(renderListRecord);
+    const effectivePerAccountLimit = resolvePerAccountLimit({ account, limit, perAccountLimit, defaultLimit: 20 });
+    const messages = effectivePerAccountLimit
+      ? store.listArchiveByAccount({
+        provider,
+        account,
+        since: range.since?.toISOString(),
+        until: range.until?.toISOString(),
+        perAccountLimit: effectivePerAccountLimit,
+      })
+      : store.listArchive({
+        provider,
+        account,
+        since: range.since?.toISOString(),
+        until: range.until?.toISOString(),
+        limit: limit || 20,
+      });
 
-    return toToolResult({
+    const payload = renderListPayload({
       mode: "list",
       since: range.since?.toISOString() || null,
       until: range.until?.toISOString() || null,
-      count: messages.length,
       messages,
+      perAccountLimit: effectivePerAccountLimit,
     });
+    return toToolResult(payload, renderListToolText(payload));
   },
 );
 
